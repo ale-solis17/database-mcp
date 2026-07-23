@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────
+# Database MCP Server — Docker Compose
+#
+# Usage:
+#   docker compose build
+#   docker compose run --rm database-mcp   # interactive stdio session
+#
+# The MCP server communicates over stdio, so it is normally launched by an MCP
+# client with `docker run -i`. This file is mainly for building the image and
+# for local testing against the optional bundled PostgreSQL (profile "local-db").
+# ─────────────────────────────────────────────────────────────
+
+services:
+  database-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: database-mcp:latest
+    # Read connection + limits from .env (never bake credentials into the image).
+    env_file:
+      - .env
+    # stdio transport needs stdin open.
+    stdin_open: true
+    tty: false
+    restart: "no"
+    networks:
+      - mcp-net
+
+  # Optional local PostgreSQL for testing. Start with:
+  #   docker compose --profile local-db up -d postgres
+  # Then point .env at:  DB_HOST=postgres  DB_PORT=5432
+  postgres:
+    image: postgres:16-alpine
+    profiles:
+      - local-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mcp-net
+
+networks:
+  mcp-net:
+    driver: bridge
+
+volumes:
+  pgdata:
