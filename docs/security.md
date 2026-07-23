@@ -46,14 +46,17 @@ Create it (full script: [`sql/create_readonly_user.sql`](../sql/create_readonly_
 ```sql
 CREATE ROLE mcp_readonly WITH LOGIN PASSWORD 'change_me_strong_password';
 GRANT CONNECT ON DATABASE your_database TO mcp_readonly;
-GRANT USAGE ON SCHEMA public TO mcp_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO mcp_readonly;
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO mcp_readonly;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO mcp_readonly;
-ALTER ROLE mcp_readonly SET default_transaction_read_only = on;  -- PG 14+
+-- PostgreSQL 14+: SELECT on every table/view/sequence in every schema
+-- (current and future) + USAGE on all schemas — one grant, no per-tenant setup.
+GRANT pg_read_all_data TO mcp_readonly;
+ALTER ROLE mcp_readonly SET default_transaction_read_only = on;
 ```
 
-Repeat the schema block for each schema you expose. No `EXECUTE` grants are needed — the MCP only inspects function/procedure definitions, it never calls them.
+`pg_read_all_data` (PG 14+) is ideal for multi-schema / multi-tenant databases: it
+covers new schemas and tables automatically, so you never re-grant. On PostgreSQL
+< 14, grant per schema instead (`GRANT USAGE ON SCHEMA … / GRANT SELECT ON ALL
+TABLES IN SCHEMA …` + `ALTER DEFAULT PRIVILEGES …`). No `EXECUTE` grants are
+needed — the MCP only inspects function/procedure definitions, it never calls them.
 
 Verify with:
 

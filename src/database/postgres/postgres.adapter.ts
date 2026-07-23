@@ -93,11 +93,12 @@ export class PostgresAdapter implements DatabaseAdapter {
 
     async listSchemas(): Promise<SchemaInfo[]> {
         const { rows } = await this.pool.query<{ name: string }>(
-            `SELECT schema_name AS name
-               FROM information_schema.schemata
-              WHERE schema_name NOT IN ('pg_catalog', 'information_schema')
-                AND schema_name NOT LIKE 'pg_%'
-              ORDER BY schema_name`,
+            `SELECT n.nspname AS name
+               FROM pg_namespace n
+              WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                AND n.nspname NOT LIKE 'pg_%'
+                AND has_schema_privilege(n.oid, 'USAGE')
+              ORDER BY n.nspname`,
         );
         return rows.map((r) => ({ name: r.name }));
     }
@@ -116,6 +117,8 @@ export class PostgresAdapter implements DatabaseAdapter {
               WHERE c.relkind IN ('r', 'p')
                 AND n.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND n.nspname NOT LIKE 'pg_%'
+                AND has_schema_privilege(n.oid, 'USAGE')
+                AND has_table_privilege(c.oid, 'SELECT')
                 AND ($1::text IS NULL OR n.nspname = $1)
               ORDER BY n.nspname, c.relname`,
             [schema ?? null],
@@ -339,6 +342,8 @@ export class PostgresAdapter implements DatabaseAdapter {
               WHERE con.contype = 'f'
                 AND fn.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND fn.nspname NOT LIKE 'pg_%'
+                AND has_schema_privilege(fn.oid, 'USAGE')
+                AND has_table_privilege(con.conrelid, 'SELECT')
                 AND ($1::text IS NULL OR fn.nspname = $1)
               ORDER BY fn.nspname, fc.relname, con.conname`,
             [schema ?? null],
@@ -368,6 +373,8 @@ export class PostgresAdapter implements DatabaseAdapter {
               WHERE c.relkind IN ('v', 'm')
                 AND n.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND n.nspname NOT LIKE 'pg_%'
+                AND has_schema_privilege(n.oid, 'USAGE')
+                AND has_table_privilege(c.oid, 'SELECT')
                 AND ($1::text IS NULL OR n.nspname = $1)
               ORDER BY n.nspname, c.relname`,
             [schema ?? null],
@@ -411,6 +418,7 @@ export class PostgresAdapter implements DatabaseAdapter {
               WHERE p.prokind IN ('f', 'p')
                 AND n.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND n.nspname NOT LIKE 'pg_%'
+                AND has_schema_privilege(n.oid, 'USAGE')
                 AND NOT EXISTS (
                     SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e'
                 )
@@ -462,6 +470,8 @@ export class PostgresAdapter implements DatabaseAdapter {
                   WHERE c.relkind IN ('r', 'p')
                     AND n.nspname NOT IN ('pg_catalog', 'information_schema')
                     AND n.nspname NOT LIKE 'pg_%'
+                    AND has_schema_privilege(n.oid, 'USAGE')
+                    AND has_table_privilege(c.oid, 'SELECT')
                   GROUP BY n.nspname, c.relname
                   ORDER BY n.nspname, c.relname`,
             ),
@@ -471,6 +481,8 @@ export class PostgresAdapter implements DatabaseAdapter {
                   WHERE c.relkind IN ('v', 'm')
                     AND n.nspname NOT IN ('pg_catalog', 'information_schema')
                     AND n.nspname NOT LIKE 'pg_%'
+                    AND has_schema_privilege(n.oid, 'USAGE')
+                    AND has_table_privilege(c.oid, 'SELECT')
                   GROUP BY n.nspname`,
             ),
             this.pool.query<{ schema: string; count: string }>(
@@ -479,6 +491,7 @@ export class PostgresAdapter implements DatabaseAdapter {
                   WHERE p.prokind IN ('f', 'p')
                     AND n.nspname NOT IN ('pg_catalog', 'information_schema')
                     AND n.nspname NOT LIKE 'pg_%'
+                    AND has_schema_privilege(n.oid, 'USAGE')
                     AND NOT EXISTS (
                         SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e'
                     )

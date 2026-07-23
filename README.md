@@ -137,41 +137,71 @@ Copy [.env.example](.env.example) to `.env` and fill it in. **Never commit `.env
 ```sql
 CREATE ROLE mcp_readonly WITH LOGIN PASSWORD 'change_me_strong_password';
 GRANT CONNECT ON DATABASE your_database TO mcp_readonly;
-GRANT USAGE ON SCHEMA public TO mcp_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO mcp_readonly;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO mcp_readonly;
--- PG 14+: force every transaction from this role to be read-only
+-- PostgreSQL 14+: SELECT on every table/view in every schema (current & future),
+-- no per-schema/per-tenant grants needed.
+GRANT pg_read_all_data TO mcp_readonly;
+-- Force every transaction from this role to be read-only.
 ALTER ROLE mcp_readonly SET default_transaction_read_only = on;
 ```
 
+> For PostgreSQL < 14 (no `pg_read_all_data`), grant per schema instead — see [sql/create_readonly_user.sql](sql/create_readonly_user.sql).
+
 Verify it: `npm run verify-permissions`. Details in [docs/security.md](docs/security.md).
 
-## Connecting Claude Code
+## Connecting an MCP client
 
-After `npm run build`:
+> **Important:** the MCP client config always lives on the **user's machine**, not
+> inside this repo — it contains absolute paths and secrets, which differ per
+> person. You never commit it. What *is* shareable is this project plus the
+> generator below, which produces the correct config for whoever runs it.
+
+### The easy way — generate it
+
+```bash
+npm run generate-config           # prints the snippet for THIS machine (Node + Docker variants)
+npm run generate-config -- --merge          # writes it into your Claude Desktop config automatically
+npm run generate-config -- --merge --docker  # same, but using the Docker command
+```
+
+The generator fills in this machine's absolute Node path, the absolute path to
+`dist/index.js`, and the values from your local `.env`. It knows the Claude
+Desktop config location on Windows, macOS and Linux. `--merge` backs up any
+existing config and only adds/updates the `database-mcp` entry (it never
+touches your other servers). The interactive `setup` scripts run this for you.
+
+### Claude Code (CLI, if installed)
 
 ```bash
 claude mcp add database-mcp -- node "/absolute/path/to/dist/index.js"
 ```
 
-The setup script prints this command with the correct absolute path.
+### Manual (any MCP client, e.g. Claude Desktop)
 
-## Other MCP clients
-
-Add to the client's config (e.g. `claude_desktop_config.json`):
+Add under `mcpServers` in the client's config file. **Node variant** — put your
+real values in `env` so it doesn't depend on a `.env` file or working directory:
 
 ```json
 {
   "mcpServers": {
     "database-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/dist/index.js"]
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/dist/index.js"],
+      "env": {
+        "DB_TYPE": "postgres",
+        "DB_HOST": "your-host",
+        "DB_PORT": "5432",
+        "DB_NAME": "your_db",
+        "DB_USER": "mcp_readonly",
+        "DB_PASSWORD": "your_password",
+        "DB_SSL": "true"
+      }
     }
   }
 }
 ```
 
-To run the Dockerized server as a client-spawned process:
+**Docker variant** — portable across machines (same image name everywhere); only
+the `.env` path is machine-specific:
 
 ```json
 {
@@ -183,6 +213,22 @@ To run the Dockerized server as a client-spawned process:
   }
 }
 ```
+
+After editing the config, **fully restart the client** (for Claude Desktop, Quit
+from the tray — closing the window is not enough).
+
+### Sharing the project with someone else
+
+The project is generic; only per-machine details differ. Each person:
+
+1. Gets the code (clone/copy **without** `node_modules`, `dist`, `.env`).
+2. Runs `./setup.sh` / `setup.ps1` (or `npm install && npm run build`) — this
+   builds it **and** generates their config snippet with their own paths.
+3. Creates their own `.env` (their database, their `mcp_readonly` user), or lets
+   the setup script collect it.
+4. Restarts their MCP client.
+
+Nobody edits paths by hand, and no secrets travel with the repo.
 
 ## Available tools
 
@@ -207,6 +253,8 @@ Three independent layers — see [docs/security.md](docs/security.md) for the fu
 1. **SQL validation (MCP layer).** Every `execute_select` query is parsed with a real SQL parser ([node-sql-parser](https://www.npmjs.com/package/node-sql-parser)). Only a **single** `SELECT`/`WITH`-select statement is allowed. Rejected: writes, DDL, DCL, multiple statements, comment-smuggled statements, data-modifying CTEs, and a denylist of dangerous functions (`pg_sleep`, `pg_read_file`, `lo_*`, `dblink`, admin functions…). String literals are masked so keywords/functions inside quotes can't fool or trip the checks. A textual fallback guards queries the parser can't build an AST for.
 2. **Read-only transaction (engine).** Queries run inside `BEGIN TRANSACTION READ ONLY` with `SET LOCAL statement_timeout`. PostgreSQL itself refuses any write — the strongest guarantee, independent of parsing.
 3. **Read-only database user (last line).** The dedicated `mcp_readonly` role has no write privileges, so even a bug upstream cannot modify data.
+
+**Privilege-aware discovery.** The listing tools (`list_schemas`, `list_tables`, `list_views`, `list_procedures`, `get_relationships`, `get_database_overview`) only surface schemas/objects the **connected user can actually access** (`has_schema_privilege` / `has_table_privilege`). So "what the AI sees" always matches "what it can query" — no listing tables that `execute_select` would then reject. Targeted inspection tools (`describe_table`, `get_table_ddl`, `get_view_definition`, `get_procedure_definition`) read the system catalog for a named object, so they work regardless of grants.
 
 Plus: row cap (`MAX_ROWS`), query timeout (`QUERY_TIMEOUT_MS`), result-size cap (`MAX_RESULT_SIZE_MB`), safe error messages (no credentials/connection strings leaked), and logs written to **stderr only** (stdout is reserved for the MCP protocol).
 

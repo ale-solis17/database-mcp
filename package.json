@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "healthcheck": "node dist/healthcheck.js",
-    "verify-permissions": "node dist/verify-permissions.js"
+    "verify-permissions": "node dist/verify-permissions.js",
+    "generate-config": "node scripts/generate-mcp-config.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -118,22 +118,13 @@ switch ($LASTEXITCODE) {
 Write-Host ""
 
 # ---- MCP client config ---------------------------------------------------
-$absDist = (Join-Path (Get-Location) "dist\index.js")
 Write-Host "Connect to an MCP client" -ForegroundColor Cyan
-Write-Host "  Claude Code (CLI):"
-Write-Host "    claude mcp add database-mcp -- node `"$absDist`""
+Write-Host "  Generating the config snippet for THIS machine..."
+node scripts/generate-mcp-config.mjs
 Write-Host ""
-Write-Host "  Or add this to your MCP client config (e.g. claude_desktop_config.json):"
-$jsonEscaped = $absDist -replace '\\', '\\'
-Write-Host @"
-    {
-      "mcpServers": {
-        "database-mcp": {
-          "command": "node",
-          "args": ["$jsonEscaped"]
-        }
-      }
-    }
-"@
+$merge = Read-Host "  Merge it into your Claude Desktop config automatically? (y/N)"
+if ($merge -eq "y" -or $merge -eq "Y") {
+    node scripts/generate-mcp-config.mjs --merge
+}
 Write-Host ""
-Write-Ok "Setup complete."
+Write-Ok "Setup complete. Restart your MCP client to load the server."

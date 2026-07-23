@@ -123,21 +123,13 @@ fi
 echo
 
 # ---- MCP client config ---------------------------------------------------
-ABS_DIST="$(pwd)/dist/index.js"
 bold "Connect to an MCP client"
-info "Claude Code (CLI):"
-echo "    claude mcp add database-mcp -- node \"$ABS_DIST\""
+info "Generating the config snippet for THIS machine..."
+node scripts/generate-mcp-config.mjs
 echo
-info "Or add this to your MCP client config (e.g. claude_desktop_config.json):"
-cat <<EOF
-    {
-      "mcpServers": {
-        "database-mcp": {
-          "command": "node",
-          "args": ["$ABS_DIST"]
-        }
-      }
-    }
-EOF
+read -r -p "  Merge it into your Claude Desktop config automatically? (y/N): " MERGE
+if [ "${MERGE:-N}" = "y" ] || [ "${MERGE:-N}" = "Y" ]; then
+  node scripts/generate-mcp-config.mjs --merge
+fi
 echo
-ok "Setup complete."
+ok "Setup complete. Restart your MCP client to load the server."
