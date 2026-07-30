@@ -1,14 +1,27 @@
 # ─────────────────────────────────────────────────────────────
 # Database MCP Server — Docker Compose
 #
-# Usage:
-#   docker compose build
-#   docker compose run --rm database-mcp   # interactive stdio session
+# This file exists to BUILD the image and to run an optional local PostgreSQL.
+# It is NOT how you run the server day to day: the MCP server speaks JSON-RPC
+# over stdio, so it must be spawned by a client with stdin attached. Use the
+# helper script (which names every container) instead of `compose up`:
 #
-# The MCP server communicates over stdio, so it is normally launched by an MCP
-# client with `docker run -i`. This file is mainly for building the image and
-# for local testing against the optional bundled PostgreSQL (profile "local-db").
+#   docker compose build database-mcp                 # build database-mcp:latest
+#   ./scripts/docker-mcp.sh run                       # named, one-off session
+#   .\scripts\docker-mcp.ps1 run                      # same on Windows
+#   docker compose --profile local-db up -d postgres  # throwaway local database
+#
+# Container tracking: every container created by this project carries the label
+# `com.database-mcp.stack=database-mcp`, so they can always be found and removed
+# regardless of how they were started:
+#
+#   docker ps -a --filter label=com.database-mcp.stack=database-mcp
+#   ./scripts/docker-mcp.sh ps      # same listing
+#   ./scripts/docker-mcp.sh clean   # remove the stopped ones
 # ─────────────────────────────────────────────────────────────
+
+# Explicit project name so container/network names never depend on the directory.
+name: database-mcp
 
 services:
   database-mcp:
@@ -16,11 +29,23 @@ services:
       context: .
       dockerfile: Dockerfile
     image: database-mcp:latest
+    # `compose run` creates a NEW one-off container per invocation, so a fixed
+    # container_name cannot be used here. Pass one per session instead:
+    #   docker compose run --rm --name database-mcp-session database-mcp
+    # The labels below make unnamed leftovers findable either way.
+    labels:
+      com.database-mcp.stack: database-mcp
+      com.database-mcp.role: mcp-server
     # Read connection + limits from .env (never bake credentials into the image).
+    # NOTE: env_file is a Compose feature — plain `docker run` and the Docker
+    # Desktop Run button ignore it and need `--env-file .env` explicitly.
     env_file:
       - .env
-    # stdio transport needs stdin open.
-    stdin_open: true
+    # Deliberately NO `stdin_open: true`. `docker compose run` attaches stdin on
+    # its own, whereas `stdin_open` would hand `docker compose up` an stdin pipe
+    # that nobody ever writes to — leaving a container idling as "healthy"
+    # forever. Without it, an accidental `up` exits immediately with a message
+    # explaining that this server needs a client on stdin.
     tty: false
     restart: "no"
     networks:
@@ -28,11 +53,15 @@ services:
 
   # Optional local PostgreSQL for testing. Start with:
   #   docker compose --profile local-db up -d postgres
-  # Then point .env at:  DB_HOST=postgres  DB_PORT=5432
+  # Then point .env at:  DB_HOST=localhost  DB_PORT=5432
   postgres:
     image: postgres:16-alpine
+    container_name: database-mcp-postgres
     profiles:
       - local-db
+    labels:
+      com.database-mcp.stack: database-mcp
+      com.database-mcp.role: local-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

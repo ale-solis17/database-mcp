@@ -104,8 +104,26 @@ npm run verify-permissions   # checks the user is read-only
 
 ```bash
 cp .env.example .env   # edit values
-docker compose build
-docker compose run --rm database-mcp
+docker compose build database-mcp
+```
+
+Start a named, self-removing session (`.\scripts\docker-mcp.ps1 run` on Windows):
+
+```bash
+./scripts/docker-mcp.sh run
+```
+
+**Do not use the Docker Desktop "Run"/"Start" button.** The server speaks
+JSON-RPC over stdio, so it needs a client on its stdin (`docker run -i`), and the
+Desktop UI passes neither stdin nor `.env` (`env_file:` is Compose-only) — it
+fails with `Missing required environment variable: DB_HOST`.
+
+Every container of this project is labelled `com.database-mcp.stack=database-mcp`,
+so sessions never get lost even when a client spawns them:
+
+```bash
+./scripts/docker-mcp.sh ps      # list them (also: npm run docker:ps)
+./scripts/docker-mcp.sh clean   # remove the stopped ones
 ```
 
 See [Docker details](#docker-details) and [docs/installation.md](docs/installation.md).
@@ -208,11 +226,22 @@ the `.env` path is machine-specific:
   "mcpServers": {
     "database-mcp": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "--env-file", "/absolute/path/.env", "database-mcp:latest"]
+      "args": [
+        "run", "-i", "--rm",
+        "--name", "database-mcp-desktop",
+        "--label", "com.database-mcp.stack=database-mcp",
+        "--env-file", "/absolute/path/.env",
+        "database-mcp:latest"
+      ]
     }
   }
 }
 ```
+
+`--name` makes the session identifiable in Docker Desktop instead of getting a
+random name. Give each client a different name (`database-mcp-code`,
+`database-mcp-desktop`) so two clients can run at the same time —
+`npm run generate-config -- --docker --client=code` emits it for you.
 
 After editing the config, **fully restart the client** (for Claude Desktop, Quit
 from the tray — closing the window is not enough).
@@ -293,11 +322,30 @@ npm start            # node dist/index.js
 - Multi-stage [Dockerfile](Dockerfile): builds TypeScript, then ships only production deps.
 - Runs as the non-root `node` user.
 - `HEALTHCHECK` runs `dist/healthcheck.js` to verify DB connectivity.
-- [docker-compose.yml](docker-compose.yml) reads `.env`, uses a bridge network, and offers an optional bundled PostgreSQL under the `local-db` profile:
+- [docker-compose.yml](docker-compose.yml) reads `.env`, uses a bridge network, and offers an optional bundled PostgreSQL (`database-mcp-postgres`) under the `local-db` profile:
 
 ```bash
 docker compose --profile local-db up -d postgres
 ```
+
+### Container lifecycle and naming
+
+This is a **one-off, stdio** workload, not a long-running service, which changes
+how containers behave:
+
+- `docker run` / `docker compose run` create a **new container per invocation**.
+  Docker names unnamed ones randomly (`nervous_panini`), so repeated sessions look
+  like unrelated containers. `scripts/docker-mcp.*` always passes `--name` and
+  `--rm`.
+- The image carries `LABEL com.database-mcp.stack=database-mcp`. Containers inherit
+  image labels, so even a container started by an MCP client with a generated name
+  is findable: `docker ps -a --filter label=com.database-mcp.stack=database-mcp`.
+- The server **exits when its client closes stdin**, so a session cannot outlive
+  the client that spawned it and leak a connection pool.
+- The compose service deliberately sets **no** `stdin_open`, so an accidental
+  `docker compose up` exits immediately instead of idling as "healthy" forever.
+- Nothing is baked into the image: `env_file:` only applies to Compose, so plain
+  `docker run` needs `--env-file .env`.
 
 ## Adding a new database engine
 

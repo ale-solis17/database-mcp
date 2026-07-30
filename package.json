@@ -11,7 +11,10 @@
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "healthcheck": "node dist/healthcheck.js",
     "verify-permissions": "node dist/verify-permissions.js",
-    "generate-config": "node scripts/generate-mcp-config.mjs"
+    "generate-config": "node scripts/generate-mcp-config.mjs",
+    "docker:build": "docker compose build database-mcp",
+    "docker:ps": "docker ps -a --filter label=com.database-mcp.stack=database-mcp",
+    "docker:clean": "docker rm $(docker ps -aq --filter label=com.database-mcp.stack=database-mcp --filter status=exited --filter status=created)"
   },
   "engines": {
     "node": ">=20"

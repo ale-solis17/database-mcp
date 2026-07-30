@@ -11,6 +11,7 @@
 //   node scripts/generate-mcp-config.mjs --docker   # prefer the Docker variant
 //   node scripts/generate-mcp-config.mjs --merge     # merge into Claude Desktop config
 //   node scripts/generate-mcp-config.mjs --merge --docker
+//   node scripts/generate-mcp-config.mjs --docker --client=code   # name the container
 // ─────────────────────────────────────────────────────────────
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -62,9 +63,28 @@ const nodeServer = {
     env,
 };
 
+// Docker variant. `--name` is explicit so the container shows up in Docker
+// Desktop as "database-mcp-<client>" instead of a random name like
+// "nervous_panini", and `--label` keeps it findable/cleanable either way:
+//   docker ps -a --filter label=com.database-mcp.stack=database-mcp
+// Give each client a distinct name (--client) so two clients can run at once.
+const clientArg = [...args].find((a) => a.startsWith("--client="));
+const clientName = clientArg ? clientArg.slice("--client=".length) : doMerge ? "desktop" : "client";
+
 const dockerServer = {
     command: "docker",
-    args: ["run", "-i", "--rm", "--env-file", envPath, "database-mcp:latest"],
+    args: [
+        "run",
+        "-i",
+        "--rm",
+        "--name",
+        `database-mcp-${clientName}`,
+        "--label",
+        "com.database-mcp.stack=database-mcp",
+        "--env-file",
+        envPath,
+        "database-mcp:latest",
+    ],
 };
 
 const chosen = useDocker ? dockerServer : nodeServer;
@@ -92,6 +112,10 @@ if (!doMerge) {
     log("");
     log("--- Option B: run with Docker (after `docker compose build`) ---");
     log(JSON.stringify({ mcpServers: { "database-mcp": dockerServer } }, null, 2));
+    log("");
+    log(`The container is named "database-mcp-${clientName}" and removed on exit.`);
+    log("For a second client, re-run with --client=<name> so the names don't collide.");
+    log("List/clean sessions:  scripts/docker-mcp.ps1 ps   |   scripts/docker-mcp.sh ps");
     log("");
     log("Tip: run with --merge to write it into your Claude Desktop config automatically.");
     process.exit(0);

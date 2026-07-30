@@ -20,6 +20,14 @@ FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Containers inherit image labels, so every container started from this image is
+# findable even when a client spawned it with an auto-generated name:
+#   docker ps -a --filter label=com.database-mcp.stack=database-mcp
+LABEL com.database-mcp.stack="database-mcp" \
+      com.database-mcp.role="mcp-server" \
+      org.opencontainers.image.title="database-mcp" \
+      org.opencontainers.image.description="Read-only database MCP server (stdio transport)"
+
 # Only production dependencies in the final image.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
