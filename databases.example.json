@@ -1,0 +1,49 @@
+{
+  "$schema": "./databases.schema.json",
+  "_readme": [
+    "Copy this file to databases.json, or just run ./setup.sh (setup.ps1 on Windows)",
+    "and it writes both this file and the matching .env entries for you.",
+    "",
+    "Each entry under \"profiles\" is one database this server can query. Every MCP",
+    "tool takes an optional \"profile\" argument; omit it and \"defaultProfile\" is",
+    "used. The AI discovers what exists by calling the list_databases tool.",
+    "",
+    "A profile is written in ONE of two styles - never both:",
+    "  A) discrete fields: host, port, database, user, password, ssl",
+    "  B) a single connection string: url",
+    "",
+    "NEVER put a password or a full URL literally in this file. Use ${VAR} and put",
+    "the value in .env. Keeping this file secret-free is what makes it safe to",
+    "bind-mount read-only into Docker, readable by the container's non-root user,",
+    "and safe to paste into a bug report. Write $${VAR} for a literal ${VAR}.",
+    "",
+    "Profile names: lowercase letters, digits and underscore, starting with a",
+    "letter, max 32 chars. Reserved: all, default, none, profiles, list.",
+    "",
+    "Keys starting with _ (like this one) and $schema are ignored by the server,",
+    "so you can leave notes here. Everything else must be a key the server knows -",
+    "a typo like \"hosts\" is reported as an error rather than silently ignored."
+  ],
+
+  "defaultProfile": "neon",
+
+  "profiles": {
+    "neon": {
+      "_comment": "Style A - discrete fields. Use when you know host/database/user.",
+      "type": "postgres",
+      "host": "ep-example-123456.us-east-2.aws.neon.tech",
+      "port": 5432,
+      "database": "neondb",
+      "user": "mcp_readonly",
+      "password": "${MCPDB_NEON_PASSWORD}",
+      "ssl": true,
+      "description": "Produccion SaaS"
+    },
+
+    "local": {
+      "_comment": "Style B - one URL. Use when your provider handed you a connection string.",
+      "url": "${MCPDB_LOCAL_URL}",
+      "description": "Base secundaria (local)"
+    }
+  }
+}

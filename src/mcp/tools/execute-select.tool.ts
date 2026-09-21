@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ToolContext } from "../../types/mcp.types.js";
-import { jsonResponse, runTool } from "./tool-helpers.js";
+import { jsonResponse, profileParam, resolveAdapter, runTool } from "./tool-helpers.js";
 import { validateSelectQuery } from "../../security/query-validator.js";
 
 export function registerExecuteSelectTool(server: McpServer, ctx: ToolContext): void {
@@ -16,14 +16,18 @@ export function registerExecuteSelectTool(server: McpServer, ctx: ToolContext): 
                 query: z
                     .string()
                     .describe("A single read-only SELECT (or WITH ... SELECT) statement."),
+                profile: profileParam(ctx),
             },
         },
-        async ({ query }) =>
+        async ({ query, profile }) =>
             runTool("execute_select", async () => {
                 // Layer A/B: reject anything that is not a single read-only SELECT.
                 const validated = validateSelectQuery(query);
                 // Layer C: adapter runs it inside a READ ONLY transaction with limits.
-                const result = await ctx.adapter.executeSelect(validated, ctx.limits);
+                const result = await resolveAdapter(ctx, profile).executeSelect(
+                    validated,
+                    ctx.limits,
+                );
                 return jsonResponse(result);
             }),
     );

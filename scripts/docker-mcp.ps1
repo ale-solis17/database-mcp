@@ -33,6 +33,7 @@ Set-Location -Path $projectRoot
 $Image = "database-mcp:latest"
 $Label = "com.database-mcp.stack=database-mcp"
 $EnvFile = Join-Path $projectRoot ".env"
+$ConfigFile = Join-Path $projectRoot "databases.json"
 
 function Write-Ok($m)   { Write-Host "  [OK] $m"   -ForegroundColor Green }
 function Write-Warn($m) { Write-Host "  [!]  $m"   -ForegroundColor Yellow }
@@ -68,6 +69,10 @@ switch ($Action) {
             Write-Err ".env not found. Copy .env.example to .env and fill it in first."
             exit 1
         }
+        if (-not (Test-Path $ConfigFile)) {
+            Write-Err "databases.json not found. Run .\setup.ps1 (or copy databases.example.json)."
+            exit 1
+        }
         if ([string]::IsNullOrWhiteSpace($Name)) {
             $Name = "database-mcp-session-$([DateTimeOffset]::Now.ToUnixTimeSeconds())"
         }
@@ -80,7 +85,12 @@ switch ($Action) {
         Write-Host "Starting MCP stdio session as '$Name' (Ctrl+C to stop)" -ForegroundColor Cyan
         # -i keeps stdin attached (required by the stdio transport);
         # --rm guarantees the container does not survive the session.
-        docker run -i --rm --name $Name --env-file $EnvFile `
+        # databases.json is mounted read-only rather than baked into the image:
+        # it holds ${VAR} references, and the values come from --env-file.
+        docker run -i --rm --name $Name `
+            --env-file $EnvFile `
+            -v "$($ConfigFile):/config/databases.json:ro" `
+            -e DATABASES_CONFIG=/config/databases.json `
             --label $Label --label "com.database-mcp.role=mcp-server" $Image
         exit $LASTEXITCODE
     }

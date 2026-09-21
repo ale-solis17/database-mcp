@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ToolContext } from "../../types/mcp.types.js";
-import { jsonResponse, runTool } from "./tool-helpers.js";
+import { jsonResponse, profileParam, resolveAdapter, runTool } from "./tool-helpers.js";
 
 export function registerGetRelationshipsTool(server: McpServer, ctx: ToolContext): void {
     server.registerTool(
@@ -14,11 +14,12 @@ export function registerGetRelationshipsTool(server: McpServer, ctx: ToolContext
                     .string()
                     .optional()
                     .describe("Optional schema to filter the source tables by."),
+                profile: profileParam(ctx),
             },
         },
-        async ({ schema }) =>
+        async ({ schema, profile }) =>
             runTool("get_relationships", async () => {
-                const relations = await ctx.adapter.getRelationships(schema);
+                const relations = await resolveAdapter(ctx, profile).getRelationships(schema);
                 return jsonResponse(relations);
             }),
     );

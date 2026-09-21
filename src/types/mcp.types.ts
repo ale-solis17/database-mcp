@@ -1,15 +1,16 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { DatabaseAdapter } from "../database/database.adapter.js";
+import type { ConnectionRegistry } from "../database/connection-registry.js";
 import type { QueryLimits } from "./database.types.js";
 
 /**
  * Shared context passed to every MCP tool factory.
  *
- * Tools never talk to a database engine directly — they receive an adapter
- * (already resolved to the configured engine) plus the safety limits.
+ * Tools never talk to a database engine directly — they resolve an adapter for
+ * the requested profile out of the registry (see `resolveAdapter` in
+ * tool-helpers) and get the safety limits, which are global across profiles.
  */
 export interface ToolContext {
-    adapter: DatabaseAdapter;
+    registry: ConnectionRegistry;
     limits: QueryLimits;
 }
 

@@ -1,0 +1,5 @@
+{
+  "profiles": {
+    "only": { "host": "h", "database": "d", "user": "u", "password": "p" }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "../../databases.schema.json",
+  "_readme": ["Notes may mention ${NOT_A_REAL_VAR} without it being resolved."],
+  "defaultProfile": "remote",
+  "profiles": {
+    "remote": {
+      "_comment": "documentation key, ignored",
+      "host": "db.example.com",
+      "database": "appdb",
+      "user": "mcp_readonly",
+      "password": "${TEST_REMOTE_PASSWORD}",
+      "description": "Remote database"
+    },
+    "nearby": {
+      "host": "localhost",
+      "port": 5433,
+      "database": "localdb",
+      "user": "postgres",
+      "password": "plain"
+    }
+  }
+}

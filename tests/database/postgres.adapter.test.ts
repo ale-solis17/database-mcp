@@ -21,8 +21,14 @@ describe("PostgresAdapter (integration)", () => {
             const { PostgresAdapter: Adapter } = await import(
                 "../../src/database/postgres/postgres.adapter.js"
             );
-            const { getDatabaseConfig } = await import("../../src/config/database-config.js");
-            const a = new Adapter(getDatabaseConfig());
+            // Runs against the DEFAULT profile of databases.json. Skips itself
+            // when there is no config file or the database is unreachable.
+            const { getProfilesConfig } = await import("../../src/config/databases.js");
+            const config = getProfilesConfig();
+            const defaultProfile = config.profiles.find(
+                (p) => p.name === config.defaultProfile,
+            )!;
+            const a = new Adapter(defaultProfile.config);
             await a.testConnection();
             adapter = a;
             available = true;

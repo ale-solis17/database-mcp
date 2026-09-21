@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ToolContext } from "../../types/mcp.types.js";
-import { textResponse, runTool } from "./tool-helpers.js";
+import { profileParam, resolveAdapter, runTool, textResponse } from "./tool-helpers.js";
 
 export function registerGetProcedureDefinitionTool(server: McpServer, ctx: ToolContext): void {
     server.registerTool(
@@ -12,11 +12,12 @@ export function registerGetProcedureDefinitionTool(server: McpServer, ctx: ToolC
             inputSchema: {
                 schema: z.string().default("public").describe("Schema the routine belongs to."),
                 name: z.string().describe("Function or procedure name."),
+                profile: profileParam(ctx),
             },
         },
-        async ({ schema, name }) =>
+        async ({ schema, name, profile }) =>
             runTool("get_procedure_definition", async () => {
-                const def = await ctx.adapter.getProcedureDefinition(schema, name);
+                const def = await resolveAdapter(ctx, profile).getProcedureDefinition(schema, name);
                 return textResponse(def);
             }),
     );

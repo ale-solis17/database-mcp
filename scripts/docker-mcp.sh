@@ -23,6 +23,7 @@ cd "$PROJECT_ROOT"
 IMAGE="database-mcp:latest"
 LABEL="com.database-mcp.stack=database-mcp"
 ENV_FILE="$PROJECT_ROOT/.env"
+CONFIG_FILE="$PROJECT_ROOT/databases.json"
 
 ok()   { printf '  [OK] %s\n' "$1"; }
 warn() { printf '  [!]  %s\n' "$1"; }
@@ -42,6 +43,7 @@ case "$ACTION" in
 
     run)
         [ -f "$ENV_FILE" ] || { err ".env not found. Copy .env.example to .env and fill it in first."; exit 1; }
+        [ -f "$CONFIG_FILE" ] || { err "databases.json not found. Run ./setup.sh (or copy databases.example.json)."; exit 1; }
         NAME="${2:-database-mcp-session-$(date +%s)}"
         # Reuse of a name means a previous session was not cleaned up.
         if [ -n "$(docker ps -aq --filter "name=^/${NAME}$")" ]; then
@@ -51,7 +53,12 @@ case "$ACTION" in
         echo "Starting MCP stdio session as '$NAME' (Ctrl+C to stop)"
         # -i keeps stdin attached (required by the stdio transport);
         # --rm guarantees the container does not survive the session.
-        exec docker run -i --rm --name "$NAME" --env-file "$ENV_FILE" \
+        # databases.json is mounted read-only rather than baked into the image:
+        # it holds ${VAR} references, and the values come from --env-file.
+        exec docker run -i --rm --name "$NAME" \
+            --env-file "$ENV_FILE" \
+            -v "$CONFIG_FILE:/config/databases.json:ro" \
+            -e DATABASES_CONFIG=/config/databases.json \
             --label "$LABEL" --label "com.database-mcp.role=mcp-server" "$IMAGE"
         ;;
 

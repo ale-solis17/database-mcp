@@ -36,11 +36,18 @@ services:
     labels:
       com.database-mcp.stack: database-mcp
       com.database-mcp.role: mcp-server
-    # Read connection + limits from .env (never bake credentials into the image).
+    # Limits and the ${VAR} profile secrets come from .env (credentials are
+    # never baked into the image).
     # NOTE: env_file is a Compose feature — plain `docker run` and the Docker
     # Desktop Run button ignore it and need `--env-file .env` explicitly.
     env_file:
       - .env
+    environment:
+      DATABASES_CONFIG: /config/databases.json
+    # The list of databases is mounted read-only. It holds ${VAR} references
+    # rather than values, so it stays safe to mount and to read as non-root.
+    volumes:
+      - ./databases.json:/config/databases.json:ro
     # Deliberately NO `stdin_open: true`. `docker compose run` attaches stdin on
     # its own, whereas `stdin_open` would hand `docker compose up` an stdin pipe
     # that nobody ever writes to — leaving a container idling as "healthy"
@@ -52,8 +59,14 @@ services:
       - mcp-net
 
   # Optional local PostgreSQL for testing. Start with:
-  #   docker compose --profile local-db up -d postgres
-  # Then point .env at:  DB_HOST=localhost  DB_PORT=5432
+  #   npm run local-db:up
+  # Then add a profile pointing at localhost:5432 (setup.sh offers this as the
+  # default when you press Enter at the Host prompt).
+  #
+  # NOTE: `local-db` below is a DOCKER COMPOSE profile, an unrelated feature
+  # that happens to share the word. This project's "database profiles" are the
+  # named entries in databases.json. The npm scripts exist so you never have to
+  # type `docker compose --profile` and conflate the two.
   postgres:
     image: postgres:16-alpine
     container_name: database-mcp-postgres

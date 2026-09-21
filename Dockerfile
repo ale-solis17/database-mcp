@@ -34,10 +34,20 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
 
+# Where databases.json is expected. It is NOT copied into the image: mount it
+# at runtime (-v host/databases.json:/config/databases.json:ro). The file holds
+# ${VAR} references rather than values, so the secrets stay in --env-file and
+# nothing confidential is ever baked into a layer.
+ENV DATABASES_CONFIG=/config/databases.json
+
 # Run as the built-in non-root user.
 USER node
 
-# Verify the database is reachable with the configured read-only user.
+# Verify the DEFAULT profile is reachable with its read-only user.
+# Deliberately not `--all`: Docker restarts a container it considers unhealthy,
+# and a secondary database being asleep must not kill a server whose primary
+# database is fine. For the full check, run it by hand:
+#   docker exec <name> node dist/healthcheck.js --all
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ["node", "dist/healthcheck.js"]
 

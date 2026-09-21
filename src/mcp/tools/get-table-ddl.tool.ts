@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ToolContext } from "../../types/mcp.types.js";
-import { textResponse, runTool } from "./tool-helpers.js";
+import { profileParam, resolveAdapter, runTool, textResponse } from "./tool-helpers.js";
 
 export function registerGetTableDdlTool(server: McpServer, ctx: ToolContext): void {
     server.registerTool(
@@ -12,11 +12,12 @@ export function registerGetTableDdlTool(server: McpServer, ctx: ToolContext): vo
             inputSchema: {
                 schema: z.string().default("public").describe("Schema the table belongs to."),
                 table: z.string().describe("Table name."),
+                profile: profileParam(ctx),
             },
         },
-        async ({ schema, table }) =>
+        async ({ schema, table, profile }) =>
             runTool("get_table_ddl", async () => {
-                const ddl = await ctx.adapter.getTableDDL(schema, table);
+                const ddl = await resolveAdapter(ctx, profile).getTableDDL(schema, table);
                 return textResponse(ddl);
             }),
     );

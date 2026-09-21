@@ -3,9 +3,18 @@
 #
 #   powershell -ExecutionPolicy Bypass -File .\setup.ps1
 #
-# Prompts for PostgreSQL connection details, writes .env, validates the
-# connection, checks that the user is read-only, builds the project and prints
-# instructions to connect the server to an MCP client (e.g. Claude Code).
+# Checks prerequisites, builds the project, then runs the database wizard
+# (scripts/setup-wizard.mjs), which collects one or more databases, verifies
+# each connection and its read-only permissions, and writes databases.json
+# plus the matching secrets in .env.
+#
+# The build runs BEFORE the prompts on purpose: the wizard verifies every
+# profile as you add it, and that needs dist/ to exist.
+#
+# The prompting, JSON writing and .env merging live in the Node wizard rather
+# than here: PowerShell 5.1 would write a UTF-8 BOM (which breaks both
+# JSON.parse and `docker --env-file`), truncate nested JSON at depth 2, and
+# emit CRLF into .env. The Node script behaves identically on every platform.
 # ─────────────────────────────────────────────────────────────
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
@@ -37,84 +46,23 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 }
 Write-Host ""
 
-# ---- Collect connection details -----------------------------------------
-Write-Host "PostgreSQL connection" -ForegroundColor Cyan
-$DB_HOST = Read-Host "  DB_HOST [localhost]"
-if ([string]::IsNullOrWhiteSpace($DB_HOST)) { $DB_HOST = "localhost" }
-$DB_PORT = Read-Host "  DB_PORT [5432]"
-if ([string]::IsNullOrWhiteSpace($DB_PORT)) { $DB_PORT = "5432" }
-$DB_NAME = Read-Host "  DB_NAME"
-$DB_USER = Read-Host "  DB_USER (read-only user recommended)"
-$DB_PASSWORD_SECURE = Read-Host "  DB_PASSWORD" -AsSecureString
-$DB_PASSWORD = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($DB_PASSWORD_SECURE))
-
-$defaultSsl = if ($DB_HOST -eq "localhost" -or $DB_HOST -eq "127.0.0.1") { "false" } else { "true" }
-$DB_SSL = Read-Host "  Use SSL? (true/false) [$defaultSsl]"
-if ([string]::IsNullOrWhiteSpace($DB_SSL)) { $DB_SSL = $defaultSsl }
-
-if ([string]::IsNullOrWhiteSpace($DB_NAME) -or [string]::IsNullOrWhiteSpace($DB_USER)) {
-    Write-Err "DB_NAME and DB_USER are required."
-    exit 1
-}
-Write-Host ""
-
-# ---- Write .env ----------------------------------------------------------
-Write-Host "Writing .env" -ForegroundColor Cyan
-if (Test-Path .env) {
-    Copy-Item .env ".env.backup.$([DateTimeOffset]::Now.ToUnixTimeSeconds())"
-    Write-Warn "Existing .env backed up."
-}
-
-$envContent = @"
-### DATABASE CONFIGURATION ###
-DB_TYPE=postgres
-DB_HOST=$DB_HOST
-DB_PORT=$DB_PORT
-DB_NAME=$DB_NAME
-DB_USER=$DB_USER
-DB_PASSWORD=$DB_PASSWORD
-DB_SSL=$DB_SSL
-
-### MCP SERVER ###
-MCP_NAME=database-mcp
-MCP_VERSION=1.0.0
-
-### SAFETY LIMITS ###
-MAX_ROWS=1000
-QUERY_TIMEOUT_MS=10000
-MAX_RESULT_SIZE_MB=10
-"@
-Set-Content -Path .env -Value $envContent -Encoding utf8
-Write-Ok ".env written (not committed to git)."
-Write-Host ""
-
 # ---- Install & build -----------------------------------------------------
 Write-Host "Installing dependencies and building" -ForegroundColor Cyan
 npm install --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { Write-Err "npm install failed."; exit 1 }
 npm run build
+if ($LASTEXITCODE -ne 0) { Write-Err "Build failed. Fix the errors above and re-run."; exit 1 }
 Write-Ok "Build complete."
-Write-Host ""
 
-# ---- Validate connection -------------------------------------------------
-Write-Host "Validating database connection" -ForegroundColor Cyan
-npm run --silent healthcheck
-if ($LASTEXITCODE -eq 0) {
-    Write-Ok "Connection successful."
-} else {
-    Write-Err "Could not connect. Check your credentials and try again."
-    exit 1
+# ---- .env ----------------------------------------------------------------
+if (-not (Test-Path .env)) {
+    Copy-Item .env.example .env
+    Write-Ok ".env created from .env.example (global settings; not committed to git)."
 }
-Write-Host ""
 
-# ---- Verify read-only ----------------------------------------------------
-Write-Host "Verifying read-only permissions" -ForegroundColor Cyan
-npm run --silent verify-permissions
-switch ($LASTEXITCODE) {
-    0 { Write-Ok "User appears to be read-only." }
-    2 { Write-Warn "User is not strictly read-only. See docs/security.md to create 'mcp_readonly'." }
-    default { Write-Warn "Could not verify permissions (continuing)." }
-}
+# ---- Database wizard -----------------------------------------------------
+node scripts/setup-wizard.mjs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host ""
 
 # ---- MCP client config ---------------------------------------------------

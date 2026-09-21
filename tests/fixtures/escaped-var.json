@@ -1,0 +1,5 @@
+{
+  "profiles": {
+    "one": { "host": "h", "database": "d", "user": "u", "password": "$${NOT_EXPANDED}" }
+  }
+}

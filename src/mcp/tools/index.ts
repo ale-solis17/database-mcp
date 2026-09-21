@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolContext } from "../../types/mcp.types.js";
+import { registerListDatabasesTool } from "./list-databases.tool.js";
 import { registerListSchemasTool } from "./list-schemas.tool.js";
 import { registerListTablesTool } from "./list-tables.tool.js";
 import { registerDescribeTableTool } from "./describe-table.tool.js";
@@ -18,7 +19,9 @@ import { registerGetDatabaseOverviewTool } from "./get-database-overview.tool.js
  * Adding a new tool = write a `register<Name>Tool` module and call it here.
  */
 export function registerTools(server: McpServer, ctx: ToolContext): void {
-    // Discovery
+    // Discovery — list_databases first: it tells the model which databases
+    // exist before it picks one with the optional `profile` argument.
+    registerListDatabasesTool(server, ctx);
     registerListSchemasTool(server, ctx);
     registerListTablesTool(server, ctx);
     registerDescribeTableTool(server, ctx);

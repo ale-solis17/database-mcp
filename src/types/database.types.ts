@@ -21,6 +21,28 @@ export interface DatabaseConfig {
     ssl?: boolean;
 }
 
+/**
+ * A named database this server can query.
+ *
+ * One process serves many: tools take an optional `profile` argument naming
+ * one of these, and fall back to the default when it is omitted.
+ */
+export interface ProfileConfig {
+    name: string;
+    /** Human-readable note surfaced to the AI by `list_databases`. */
+    description?: string;
+    config: DatabaseConfig;
+}
+
+/** The whole databases.json, resolved and validated. */
+export interface ProfilesConfig {
+    defaultProfile: string;
+    /** Ordered, default first, so `list_databases` output is stable. */
+    profiles: ProfileConfig[];
+    /** Absolute path the config was loaded from, for logs and error messages. */
+    sourcePath: string;
+}
+
 /** Safety limits applied to query execution. */
 export interface QueryLimits {
     /** Hard cap on rows returned to the AI. */

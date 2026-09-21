@@ -53,25 +53,33 @@ Always apply the row cap, timeout and result-size cap from `QueryLimits`.
 
 ## 3. Register the adapter
 
-In [`src/index.ts`](../src/index.ts), extend the switch:
+Adapters are built per profile by the connection registry. In
+[`src/database/connection-registry.ts`](../src/database/connection-registry.ts),
+extend the construction to cover the new engine, keyed off the profile's
+`type` field:
 
 ```ts
-switch (dbConfig.type) {
-    case "postgres": adapter = new PostgresAdapter(dbConfig); break;
-    case "mysql":    adapter = new MySQLAdapter(dbConfig);    break;   // new
-    default: throw new Error(`No adapter available for DB_TYPE "${dbConfig.type}"`);
+switch (config.config.type) {
+    case "postgres": return new PostgresAdapter(config.config);
+    case "mysql":    return new MySQLAdapter(config.config);    // new
 }
 ```
 
 Add the engine to the `DatabaseType` union in
-`src/types/database.types.ts` and to `SUPPORTED_TYPES` in
-`src/config/database-config.ts`.
+`src/types/database.types.ts`, and to `IMPLEMENTED_TYPES` in
+`src/config/databases.ts` (`SUPPORTED_TYPES` there already lists the names the
+config file accepts).
+
+Unimplemented engines fail when the adapter is constructed rather than when the
+config is parsed, so a `databases.json` containing a future `mysql` profile
+still lets the PostgreSQL ones work.
 
 ## 4. If the SQL dialect differs
 
-`query-validator` uses `node-sql-parser` configured for PostgreSQL. For a
-different dialect, thread the dialect through `sql-parser.ts` (node-sql-parser
-supports `mysql`, `transactsql`, etc.). The read-only transaction in the adapter
+`query-validator` uses `node-sql-parser` configured for PostgreSQL, fixed at
+`sql-parser.ts` (`PARSER_OPTS`). For a different dialect, thread the dialect
+through from the profile's `type` (node-sql-parser supports `mysql`,
+`transactsql`, etc.) — with profiles this becomes per-call, not global. The read-only transaction in the adapter
 remains the hard guarantee regardless.
 
 ## 5. Test it
@@ -87,6 +95,6 @@ remains the hard guarantee regardless.
 - [ ] Read-only execution enforced at the engine level
 - [ ] Row / timeout / size limits applied
 - [ ] System schemas excluded from listings
-- [ ] Registered in `index.ts`, `DatabaseType`, `SUPPORTED_TYPES`
+- [ ] Registered in `connection-registry.ts`, `DatabaseType`, `IMPLEMENTED_TYPES`
 - [ ] Results mapped into existing shared types
 - [ ] Tests added (self-skipping integration)

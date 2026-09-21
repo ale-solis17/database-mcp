@@ -11,3 +11,7 @@ docs
 Dockerfile
 docker-compose.yml
 npm-debug.log*
+databases.json
+databases.json.backup.*
+sql/generated
+*.backup.*

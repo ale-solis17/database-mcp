@@ -1,0 +1,4 @@
+{
+  "defaultProfile": "ghost",
+  "profiles": { "one": { "host": "h", "database": "d", "user": "u", "password": "p" } }
+}

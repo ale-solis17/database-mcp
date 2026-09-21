@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/ale-solis17/database-mcp/databases.schema.json",
+  "title": "database-mcp database profiles",
+  "description": "Named database connections (\"profiles\") served by one database-mcp process. Every MCP tool accepts an optional \"profile\" argument selecting one of these.",
+  "type": "object",
+  "required": ["profiles"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path or URL to this schema. Ignored by the server; present so editors offer completion and hover docs."
+    },
+    "_readme": {
+      "description": "Free-form notes. Any key starting with _ is ignored by the server.",
+      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+    },
+    "defaultProfile": {
+      "type": "string",
+      "description": "Name of the profile used when a tool call omits \"profile\". Optional when exactly one profile is defined; required once there are several.",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+    },
+    "profiles": {
+      "type": "object",
+      "description": "One entry per database. The key is the profile name the AI passes as \"profile\".",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "Lowercase letters, digits and underscore, starting with a letter, max 32 characters. Reserved: all, default, none, profiles, list."
+      },
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/definitions/urlProfile" },
+          { "$ref": "#/definitions/fieldsProfile" }
+        ]
+      }
+    }
+  },
+
+  "definitions": {
+    "engine": {
+      "type": "string",
+      "enum": ["postgres", "mysql", "sqlserver"],
+      "default": "postgres",
+      "description": "Database engine. Only \"postgres\" is implemented today; the others are reserved."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable note shown to the AI by list_databases, e.g. \"Production SaaS\". Helps it pick the right database."
+    },
+    "comment": {
+      "description": "Free-form note. Any key starting with _ is ignored by the server."
+    },
+    "ssl": {
+      "type": "boolean",
+      "description": "Force SSL on or off. Omit to auto-detect: enabled for every host except localhost, 127.0.0.1 and ::1. In url style this overrides ?sslmode=."
+    },
+
+    "urlProfile": {
+      "type": "object",
+      "title": "Connection string",
+      "description": "Style B - a single connection string, as handed out by Neon, Supabase, Railway or RDS.",
+      "required": ["url"],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "postgres:// or postgresql:// connection string. Use ${VAR} and keep the real value in .env - it embeds the password. Special characters in the password must be percent-encoded (@ as %40, / as %2F).",
+          "pattern": "^(\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}|postgres(ql)?://).*"
+        },
+        "type": { "$ref": "#/definitions/engine" },
+        "ssl": { "$ref": "#/definitions/ssl" },
+        "description": { "$ref": "#/definitions/description" },
+        "_comment": { "$ref": "#/definitions/comment" }
+      }
+    },
+
+    "fieldsProfile": {
+      "type": "object",
+      "title": "Discrete fields",
+      "description": "Style A - host, database, user and password as separate fields.",
+      "required": ["host", "database", "user", "password"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/definitions/engine" },
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Hostname or IP of the database server."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 5432,
+          "description": "Port. Defaults to 5432."
+        },
+        "database": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Database name to connect to."
+        },
+        "user": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Login role. Use a dedicated READ-ONLY user (see sql/create_readonly_user.sql), never your application or owner user."
+        },
+        "password": {
+          "type": "string",
+          "description": "Use ${VAR} and keep the real value in .env. A literal password here is a leak waiting to happen - this file is meant to stay secret-free so it can be mounted into Docker and shared. Empty string is allowed for trust/peer authentication."
+        },
+        "ssl": { "$ref": "#/definitions/ssl" },
+        "description": { "$ref": "#/definitions/description" },
+        "_comment": { "$ref": "#/definitions/comment" }
+      }
+    }
+  }
+}

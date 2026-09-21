@@ -1,0 +1,1 @@
+{ "profiles": { "My DB": { "host": "h", "database": "d", "user": "u", "password": "p" } } }

@@ -9,9 +9,13 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "setup": "node scripts/setup-wizard.mjs",
     "healthcheck": "node dist/healthcheck.js",
+    "healthcheck:all": "node dist/healthcheck.js --all",
     "verify-permissions": "node dist/verify-permissions.js",
     "generate-config": "node scripts/generate-mcp-config.mjs",
+    "local-db:up": "docker compose --profile local-db up -d postgres",
+    "local-db:down": "docker compose --profile local-db down",
     "docker:build": "docker compose build database-mcp",
     "docker:ps": "docker ps -a --filter label=com.database-mcp.stack=database-mcp",
     "docker:clean": "docker rm $(docker ps -aq --filter label=com.database-mcp.stack=database-mcp --filter status=exited --filter status=created)"

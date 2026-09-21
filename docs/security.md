@@ -39,7 +39,7 @@ Also enforced here: **row cap** (`MAX_ROWS`), **timeout** (`QUERY_TIMEOUT_MS`), 
 
 ## Layer 3 — Read-only database user (last line)
 
-The MCP must connect with a dedicated role that has no write privileges. Even a bug in layers 1–2 cannot modify data.
+The MCP must connect with a dedicated role that has no write privileges. Even a bug in layers 1–2 cannot modify data. **This applies per database**: every profile in `databases.json` needs its own read-only role. Two profiles on the same PostgreSQL cluster share one `mcp_readonly` role (the role is cluster-wide, the grants are per database); two different servers need two independent roles.
 
 Create it (full script: [`sql/create_readonly_user.sql`](../sql/create_readonly_user.sql)):
 
@@ -61,17 +61,21 @@ needed — the MCP only inspects function/procedure definitions, it never calls 
 Verify with:
 
 ```bash
-npm run verify-permissions
+npm run verify-permissions                       # audits EVERY profile
+npm run verify-permissions -- --profile=neon     # or just one
 ```
 
-Exit code `0` = looks read-only, `2` = has write capability (fix it), `1` = could not connect.
+Exit codes: `0` = every profile looks read-only, `2` = at least one has write
+capability (fix it), `1` = at least one could not be checked. `1` wins over `2`:
+an unaudited profile is unknown, not safe.
 
 ## Other safeguards
 
 - **Errors are sanitized** — no passwords or connection strings are ever included.
 - **Logs go to stderr only** — stdout is reserved for the MCP protocol; logs never leak into it.
 - **Query text logging** is intentionally minimal to avoid recording sensitive data.
-- **Credentials** live only in `.env` / environment variables, never in source or the Docker image.
+- **Credentials** live only in `.env` / environment variables, never in source or the Docker image. `databases.json` holds `${VAR}` references rather than values, so it is safe to mount read-only into a container and safe to share.
+- **`list_databases`** builds its output field by field from an allowlist, so passwords and connection strings can never reach the model or the transcript.
 
 ## Reporting
 

@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "one": { "host": "h", "database": "d", "user": "u", "password": "${TEST_ABSENT_A}" },
+    "two": { "url": "${TEST_ABSENT_B}" }
+  },
+  "defaultProfile": "one"
+}

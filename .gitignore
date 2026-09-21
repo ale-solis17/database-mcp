@@ -1,5 +1,19 @@
 node_modules/
 dist/
+
+# Local configuration — hosts, credentials and machine-specific paths.
+# The negation must stay AFTER `.env.*` or it has no effect.
 .env
-.env.backup.*
+.env.*
+!.env.example
+databases.json
+databases.json.backup.*
+
+# Filled-in SQL written by setup (real database names + generated passwords).
+sql/generated/
+
+# Personal / de-parameterized copies of the SQL templates live here.
+# The committed templates are in sql/, not scripts/.
+scripts/*.sql
+
 .idea/

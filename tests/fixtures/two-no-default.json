@@ -1,0 +1,6 @@
+{
+  "profiles": {
+    "one": { "host": "h", "database": "d", "user": "u", "password": "p" },
+    "two": { "host": "h2", "database": "d2", "user": "u", "password": "p" }
+  }
+}

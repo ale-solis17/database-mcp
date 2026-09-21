@@ -1,26 +1,32 @@
 import { fstatSync } from "node:fs";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createMcpServer } from "./mcp/server.js";
-import { PostgresAdapter } from "./database/postgres/postgres.adapter.js";
-import { getDatabaseConfig, getQueryLimits } from "./config/database-config.js";
+import { createRegistry } from "./database/connection-registry.js";
+import { ConfigError, getProfilesConfig } from "./config/databases.js";
+import { getQueryLimits } from "./config/database-config.js";
 import { logger } from "./logger.js";
-import type { DatabaseAdapter } from "./database/database.adapter.js";
 
 /**
  * Whether stdin can actually carry the MCP protocol.
  *
  * An MCP client spawns us with a pipe on fd 0. A container started WITHOUT `-i`
  * (`docker run` with no `-i`, `docker compose up`, or the Run/Start button in
- * Docker Desktop) gets /dev/null instead: a character device that is not a TTY.
- * Detecting that lets us say so plainly instead of idling as a "healthy"
- * container that no client will ever talk to.
+ * Docker Desktop) gets /dev/null — or NUL on Windows — instead: a character
+ * device that is not a TTY. Detecting that lets us say so plainly instead of
+ * idling as a "healthy" container that no client will ever talk to.
+ *
+ * Deliberately a denylist of the known-bad case rather than an allowlist of
+ * pipe-like types: on Windows a piped stdin reports isFIFO(), isSocket(),
+ * isFile() and isCharacterDevice() ALL false, so an allowlist rejects every
+ * client-spawned server on that platform.
  */
 function stdinCanCarryProtocol(): boolean {
+    // Interactive terminal (`npm start` in a shell, `docker run -it`).
+    if (process.stdin.isTTY) return true;
     try {
-        const stat = fstatSync(0);
-        if (stat.isFIFO() || stat.isSocket()) return true;
-        // Interactive terminal (`npm start` in a shell, `docker run -it`).
-        return process.stdin.isTTY === true;
+        // A character device that is not a TTY is /dev/null or NUL: nobody is
+        // ever going to write to it.
+        return !fstatSync(0).isCharacterDevice();
     } catch {
         return false;
     }
@@ -37,28 +43,29 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
-    const dbConfig = getDatabaseConfig();
+    const config = getProfilesConfig();
+    const registry = createRegistry(config);
     logger.info("Starting database MCP server", {
-        engine: dbConfig.type,
-        host: dbConfig.host,
-        database: dbConfig.database,
+        configFile: config.sourcePath,
+        profiles: config.profiles.map((p) => p.name),
+        defaultProfile: config.defaultProfile,
     });
 
-    // Only PostgreSQL is implemented today; the switch is the extension point.
-    let adapter: DatabaseAdapter;
-    switch (dbConfig.type) {
-        case "postgres":
-            adapter = new PostgresAdapter(dbConfig);
-            break;
-        default:
-            throw new Error(`No adapter available for DB_TYPE "${dbConfig.type}"`);
+    // Probe the DEFAULT profile only, and only as a warning. The others are
+    // opened lazily on first use, and one unreachable database must not stop
+    // the model from querying the healthy ones — or from calling list_databases
+    // to find out which one is broken.
+    try {
+        await registry.get().testConnection();
+        logger.info("Default profile connection verified", { profile: config.defaultProfile });
+    } catch (err) {
+        logger.warn("Default profile is not reachable; starting anyway", {
+            profile: config.defaultProfile,
+            error: err instanceof Error ? err.message : String(err),
+        });
     }
 
-    // Fail fast if the database is unreachable.
-    await adapter.testConnection();
-    logger.info("Database connection verified");
-
-    const server = createMcpServer({ adapter, limits: getQueryLimits() });
+    const server = createMcpServer({ registry, limits: getQueryLimits() });
     const transport = new StdioServerTransport();
     await server.connect(transport);
     logger.info("MCP server connected over stdio");
@@ -70,7 +77,7 @@ async function main(): Promise<void> {
         logger.info("Shutting down", { reason });
         try {
             await server.close();
-            await adapter.close();
+            await registry.closeAll();
         } catch (err) {
             logger.error("Error during shutdown", {
                 error: err instanceof Error ? err.message : String(err),
@@ -79,20 +86,22 @@ async function main(): Promise<void> {
             process.exit(0);
         }
     };
-
     process.on("SIGINT", () => void shutdown("SIGINT"));
     process.on("SIGTERM", () => void shutdown("SIGTERM"));
-
-    // The client is our only reason to exist: when it closes the pipe we must
-    // exit, otherwise a containerized server lingers forever holding a database
-    // connection pool (and reports "healthy" while serving nobody).
     process.stdin.on("end", () => void shutdown("stdin closed"));
     process.stdin.on("close", () => void shutdown("stdin closed"));
 }
 
 main().catch((err) => {
-    logger.error("Fatal error during startup", {
-        error: err instanceof Error ? err.message : String(err),
-    });
+    if (err instanceof ConfigError) {
+        // Already a multi-line message written for a human to act on: print it
+        // as-is, with no JSON wrapper and no stack. stderr, never stdout —
+        // stdout carries the JSON-RPC stream.
+        process.stderr.write(`\n${err.message}\n\n`);
+    } else {
+        logger.error("Fatal error during startup", {
+            error: err instanceof Error ? err.message : String(err),
+        });
+    }
     process.exit(1);
 });

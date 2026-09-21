@@ -1,0 +1,1 @@
+{ "profiles": { "one": { "url": "postgresql://u:p@host:5432" } } }

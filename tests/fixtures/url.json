@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "main": { "url": "${TEST_MAIN_URL}" },
+    "insecure": { "url": "postgresql://u:p@remote.example.com:5432/db?sslmode=disable" },
+    "overridden": { "url": "postgresql://u:p@remote.example.com:5432/db?sslmode=require", "ssl": false }
+  },
+  "defaultProfile": "main"
+}
